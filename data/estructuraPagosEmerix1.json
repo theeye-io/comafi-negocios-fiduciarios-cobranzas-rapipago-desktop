@@ -1,0 +1,103 @@
+{
+    "pagos_emerix": [{
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "8048916",
+            "estado_original": "INGRESADO",
+            "tipo_de_pago": "Pago Parcial ECT",
+            "agencia": "FERNANDO ANGELONI SRL",
+            "moneda": "ARS",
+            "importe_emerix": "9000.00",
+            "valor_cuota": "9000.00",
+            "cant_total_cuotas": "9",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "10503847",
+            "estado_original": "VALIDADO",
+            "tipo_de_pago": "Pago Parcial ECT",
+            "agencia": "Gestion Legal",
+            "moneda": "ARS",
+            "importe_emerix": "8000.00",
+            "valor_cuota": "8000.00",
+            "cant_total_cuotas": "3",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "10873696",
+            "estado_original": "VALIDADO",
+            "tipo_de_pago": "Cobro sin Saldo ECT",
+            "agencia": "Gestion Legal",
+            "moneda": "ARS",
+            "importe_emerix": "2000.00",
+            "valor_cuota": "2000.00",
+            "cant_total_cuotas": "5",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "10910412",
+            "estado_original": "VALIDADO",
+            "tipo_de_pago": "Pago Parcial ECT",
+            "agencia": "Gestion Legal",
+            "moneda": "ARS",
+            "importe_emerix": "4957.00",
+            "valor_cuota": "4957.00",
+            "cant_total_cuotas": "2",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "10954891",
+            "estado_original": "ACREDITADO",
+            "tipo_de_pago": "Cancelacion Total de Prestamos ECT",
+            "agencia": "FERNANDO ANGELONI SRL",
+            "moneda": "ARS",
+            "importe_emerix": "5950.00",
+            "valor_cuota": "5950.00",
+            "cant_total_cuotas": "1",
+            "tipo_actividad": "cancelatorio",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "11653262",
+            "estado_original": "ACREDITADO",
+            "tipo_de_pago": "Pago Parcial ECT",
+            "agencia": "NF - COMAFI",
+            "moneda": "ARS",
+            "importe_emerix": "3801.02",
+            "valor_cuota": "3801.02",
+            "cant_total_cuotas": "2",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        },
+        {
+            "fecha_de_convenio": "12/8/2020",
+            "DNI": "12812591",
+            "estado_original": "INGRESADO",
+            "tipo_de_pago": "Pago Parcial ECT",
+            "agencia": "NF - COMAFI",
+            "moneda": "ARS",
+            "importe_emerix": "1532.01",
+            "valor_cuota": "1532.01",
+            "cant_total_cuotas": "3",
+            "tipo_actividad": "parcial",
+            "suma_importe_cobros_web_emerix": "",
+            "estado_carga": "pending"
+        }
+
+    ],
+    "estado_lote": "pending"
+}

@@ -1,0 +1,21 @@
+{
+	"pagos_emerix": [
+		{
+			"fecha_de_convenio": "08/09/2020",
+			"fecha_de_pago_emerix": "06/10/2020",
+			"DNI": "20381335",
+			"estado_original": "INGRESADO",
+			"tipo_de_pago": "Pago Parcial ECT",
+			"agencia": "NF - COMAFI",
+			"moneda": "ARS",
+			"importe_emerix": 1358.21,
+			"valor_cuota": 1358.21,
+			"cant_total_cuotas": 9,
+			"tipo_actividad": "Parcial",
+			"suma_importe_cobros_web_emerix": "",
+			"estado_carga": "pending"
+		}
+],
+"estado_lote": "pending"
+
+}
