@@ -30,8 +30,11 @@ Local $aplicarfiltro = "D:\Theeye\desktop\images\aplicarfiltro.bmp"
 Local $yesterday = @MDAY - 1&"/"& @MON&"/"&@YEAR
 local $flechaGuardar = "D:\Theeye\desktop\images\flechaguardar.bmp"
 local $deseareemplazarlo = "D:\Theeye\desktop\images\deseareemplazarlo.bmp"
+local $seleccioneUbicacionPROD = "D:\Theeye\desktop\images\seleccioneUbicacionPROD.bmp"
+
+
 Local $status= ""
-Local $pathDestino = "D:\theeye\conciliacion\files";"D:\Theeye\desktop\descargas\export"
+
 Local $ingresar = "D:\Theeye\desktop\images\ingresar.bmp"
 Local $iteracionesAdmTerceros = 10
 Local $seleccioneUbicacion = "D:\Theeye\desktop\images\seleccioneUbicacion.bmp"
@@ -40,6 +43,7 @@ $jsonFilePath = "D:\theeye\desktop\data\estructuraPagosEmerix.json"
 if Not FileExists($jsonFilePath) Then
 	  $status = "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " No se encuentro el JSON solicitado"
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	  Exit
  EndIf
@@ -48,6 +52,7 @@ $JsonPlainFile = FileRead($jsonFilePath)
 if @error Then
    $status= "failure"
    Local $mensajeError =  $fecha_ejecucion & " Error de lectura del archivo "&$jsonFilePath&
+   $mensajeError = StringReplace($mensajeError,"\" ,"/")
    ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
    Exit
 EndIf
@@ -59,12 +64,14 @@ Local $opagos_emerixArray = Json_get($oStatusBases,'["pagos_emerix"]')
 if Not (IsArray($CmdLine)) Then
 	  $status= "failure"
 	 Local $mensajeError =  $fecha_ejecucion & " No se ingresaron los parametros de manera correcta"& @CRLF
+	 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	 Exit
 EndIf
-if Not (UBound($CmdLine) > 3) Then
+if Not (UBound($CmdLine) > 4) Then
       	 $status= "failure"
 		 Local $mensajeError =  $fecha_ejecucion & " Numero incorrecto de parametros"
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		Exit
 EndIf
@@ -72,12 +79,14 @@ EndIf
 Local $fechaDesdePrmtr = $CmdLine[1]
 Local $fechaHastaPrmtr = $CmdLine[2]
 Local $EntornoPrmtr = $CmdLine[3]
+Local $pathDestino = $CmdLine[4]
+
+ToolTip($pathDestino&"\emerix"&@MDAY & @MON & @YEAR&".xls",0,0)
+Sleep(1000)
 
 
-
-
-Local $user = "user1"
-Local $pass = "user1"
+Local $user = "user1" ; DEV
+Local $pass = "user1" ; DEV
 
 
 
@@ -90,20 +99,40 @@ RunWait('taskkill /F /IM "iexplore.exe"')
 
 ;Ingreso al sitio
 
-    if imageExists($seleccioneUbicacion, 10) then
-		 Send("{F11}")
+   If $EntornoPrmtr = "DEV" Then
+	  $urlEntorno = "http://dstst04"
+   EndIf
+   If $EntornoPrmtr = "PROD" Then
+	  $urlEntorno = "http://bcweb11:90"
    EndIf
 
 
 sleep(6000)
 if $EntornoPrmtr = "DEV" Then
    Local $oIE = _IECreate("http://dstst04/tandem/login/source.asp")
+   _IELoadWait($oIE)
+   WinSetState(_IEPropertyGet($oIE, "frm"), "", @SW_MAXIMIZE)
+   Sleep(4000)
+  $oIE = _IEAttach("Seleccione")
+   If WinExists("Seleccione") Then
+	  WinActivate("Seleccione")
+	  ToolTip("Ventana de Login encontrada",0,0)
+	  Sleep(2000)
+   Else
+	  Return False
+   EndIf
+
+   Sleep(5000)
+   if imageExists($seleccioneUbicacion, 10) then
+		 Send("{F11}")
+   EndIf
    if imageExists($imgSolArgentina, 10) then
 	  clickOnImage($imgSolArgentina)
 	  if @error Then
 		   FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$imgSolArgentina& @CRLF)
 			$status= "failure"
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$imgSolArgentina& @CRLF
+			$mensajeError = StringReplace($mensajeError,"\" ,"/")
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		   RunWait('taskkill /F /IM "iexplore.exe"')
 		   Exit
@@ -113,6 +142,7 @@ if $EntornoPrmtr = "DEV" Then
 	   FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$imgSolArgentina& " no encontro el elemento para hacer click "& @CRLF)
 	   $status= "failure"
 	   Local $mensajeError = $fecha_ejecucion & " la imagen "&$imgSolArgentina& " no encontro el elemento para hacer click "
+	   $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	   ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	   RunWait('taskkill /F /IM "iexplore.exe"')
 	   Exit
@@ -130,16 +160,30 @@ if $EntornoPrmtr = "DEV" Then
    $iteracionesAdmTerceros=41
 ElseIf $EntornoPrmtr = "PROD" Then
    Local $oIE = _IECreate("http://bcweb11:90/tandem/login/source.asp")
+   WinSetState(_IEPropertyGet($oIE, "frm"), "", @SW_MAXIMIZE)
+   _IELoadWait($oIE)
+   Sleep(4000)
+  $oIE = _IEAttach("Seleccione")
+   If WinExists("Seleccione") Then
+	  WinActivate("Seleccione")
+	  ToolTip("Ventana de Login encontrada",0,0)
+	  Sleep(2000)
+   EndIf
+   MouseMove(716,478)
+   MouseClick($MOUSE_CLICK_LEFT)
+      Sleep(5000)
+   if imageExists($seleccioneUbicacionPROD, 10) then
+	  Send("{F11}")
+   EndIf
    if imageExists($imgSolArgentina, 10) then
 	  clickOnImage($imgSolArgentina)
 	  Sleep(5000)
-	  if imageExists($seleccioneUbicacion, 10) then
-		 Send("{F11}")
-	  EndIf
+
 	  if @error Then
 		   FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$imgSolArgentina& @CRLF)
 			$status= "failure"
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$imgSolArgentina& @CRLF
+			$mensajeError = StringReplace($mensajeError,"\" ,"/")
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		   RunWait('taskkill /F /IM "iexplore.exe"')
 		   Exit
@@ -149,6 +193,7 @@ ElseIf $EntornoPrmtr = "PROD" Then
 	   FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$imgSolArgentina& " no encontro el elemento para hacer click "& @CRLF)
 	   $status= "failure"
 	   Local $mensajeError = $fecha_ejecucion & " la imagen "&$imgSolArgentina& " no encontro el elemento para hacer click "
+	   $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	   ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	   RunWait('taskkill /F /IM "iexplore.exe"')
 	   Exit
@@ -156,17 +201,20 @@ ElseIf $EntornoPrmtr = "PROD" Then
    sleep(4000)
 EndIf
 
-For $j=1 To $iteracionesAdmTerceros
+ToolTip($urlEntorno,0,0)
 
- send ("{TAB}")
-
- sleep (250)
-
+$oIE = _IEAttach("Revisión de Cuentas")
+Local $titles = _IETagNameGetCollection($oIE, "a")
+Local $ingresarText
+For $title in $titles
+   $href_value = $title.GetAttribute("href")
+   if($href_value = $urlEntorno&"/tandem/operacional/addins/circuitos_adm/int_ng_cobros_adm_pmafi.asp") Then
+	  $ingresarText = $title
+   ExitLoop
+   EndIf
 Next
-
-sleep (2000)
-send ("{ENTER}")
-sleep (2000)
+_IEAction($ingresarText, "click")
+sleep(4000)
 
 
 
@@ -176,6 +224,7 @@ if imageExists($fechadesde, 10) then
 		 FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$fechadesde& @CRLF)
 	     $status= "failure"
 		 Local $mensajeError = $fecha_ejecucion & " no existe la imagen "&$fechadesde& @CRLF
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		RunWait('taskkill /F /IM "iexplore.exe"')
 		Exit
@@ -187,6 +236,7 @@ Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$fechadesde& " no encontro el elemento para hacer click "& @CRLF)
 	$status= "failure"
     Local $mensajeError = $fecha_ejecucion & " la imagen "&$fechadesde& " no encontro el elemento para hacer click "
+	$mensajeError = StringReplace($mensajeError,"\" ,"/")
     ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -200,6 +250,7 @@ Else
 		 FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$fechahasta& @CRLF)
 	     $status= "failure"
 		 Local $mensajeError = $fecha_ejecucion & " no existe la imagen "&$fechahasta
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		RunWait('taskkill /F /IM "iexplore.exe"')
 		Exit
@@ -211,6 +262,7 @@ Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$fechadesde& " no encontro el elemento para hacer click "& @CRLF)
 	$status= "failure"
     Local $mensajeError = $fecha_ejecucion & " la imagen "&$fechadesde& " no encontro el elemento para hacer click "
+	$mensajeError = StringReplace($mensajeError,"\" ,"/")
     ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -228,6 +280,7 @@ if imageExists($aplicarfiltro, 10) then
 	  	FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$aplicarfiltro& @CRLF)
 		$status= "failure"
 		 Local $mensajeError = $fecha_ejecucion & " no existe la imagen "&$aplicarfiltro
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		RunWait('taskkill /F /IM "iexplore.exe"')
 		Exit
@@ -239,6 +292,7 @@ Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$aplicarfiltro& " no encontro el elemento para hacer click "& @CRLF)
 	$status= "failure"
     Local $mensajeError = $fecha_ejecucion & " la imagen "&$aplicarfiltro& " no encontro el elemento para hacer click "
+	$mensajeError = StringReplace($mensajeError,"\" ,"/")
 	ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -253,6 +307,7 @@ if imageExists($descarga, 10) then
 	  	FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$descarga& @CRLF)
 		$status= "failure"
 		 Local $mensajeError = $fecha_ejecucion & " no existe la imagen "&$descarga
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	   ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 
 		RunWait('taskkill /F /IM "iexplore.exe"')
@@ -262,6 +317,7 @@ Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$descarga& " no encontro el elemento para hacer click "& @CRLF)
 		$status= "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " la imagen "&$descarga& " no encontro el elemento para hacer click "
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -269,12 +325,15 @@ Else
 Sleep(1000)
 MsgBox($MB_SYSTEMMODAL, "Title","sarasa", 1)
 
+Sleep(2000)
+
 if imageExists($descargaexcel, 4) then
    clickOnImage($descargaexcel)
    if @error Then
 	  	FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$descargaexcel& @CRLF)
 		 $status= "failure"
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$descargaexcel
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		RunWait('taskkill /F /IM "iexplore.exe"')
 		Exit
@@ -283,6 +342,7 @@ Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$descargaexcel& " no encontro el elemento para hacer click "& @CRLF)
 	 $status= "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " la imagen "&$descargaexcel& " no encontro el elemento para hacer click "
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -290,13 +350,13 @@ Else
 
 ConsoleWrite("Esperando que se pueda guardar el archivo"& @CRLF)
 ;sleep (60000)
-
+Local $contador = 1
 while Not imageExists($flechaGuardar, 10)
    Sleep(1000)
-   Local $contador = 1
-   if $contador > 120 Then
+   if $contador > 30 Then
 	  $status= "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$flechaGuardar
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	  RunWait('taskkill /F /IM "iexplore.exe"')
 	  Exit
@@ -311,6 +371,7 @@ if imageExists($flechaGuardar, 10) then
 	  	FileWrite($error_Log, $fecha_ejecucion & " no existe la imagen "&$flechaGuardar& @CRLF)
 		 $status= "failure"
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$flechaGuardar
+		 $mensajeError = StringReplace($mensajeError,"\" ,"/")
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		RunWait('taskkill /F /IM "iexplore.exe"')
 		Exit
@@ -318,13 +379,14 @@ if imageExists($flechaGuardar, 10) then
 	send("{DOWN}")
     send("{ENTER}")
 	sleep(3000)
-	send($pathDestino&@MDAY & "-" & @MON & "-" & @YEAR&".xls")
+	send($pathDestino&"\emerix"&@MDAY &"-"& @MON&"-"& @YEAR&".xls")
     send("{ENTER}")
 
 Else
 	FileWrite($error_Log, $fecha_ejecucion & " la imagen "&$flechaGuardar& " no encontro el elemento para hacer click "& @CRLF)
 	 $status= "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " la imagen "&$flechaGuardar& " no encontro el elemento para hacer click "
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit
@@ -335,11 +397,13 @@ if imageExists($deseareemplazarlo, 10) then
    send("{LEFT}")
    send("{ENTER}")
 EndIf
-sleep(2000)
+sleep(5000)
 
- Local $iFileExists = FileExists($pathDestino&@MDAY & "-" & @MON & "-" & @YEAR&".xls")
+ Local $iFileExists = FileExists($pathDestino&"\emerix"&@MDAY&"-" & @MON&"-" & @YEAR&".xls")
+ ToolTip($iFileExists,0,0)
+ Sleep(10000)
 
-if $iFileExists Then
+if $iFileExists == 1 Then
    FileWrite($ejecucionLog, $fecha_ejecucion & " Se logro descargar el archivo xls en la carpeta de descargas "& @CRLF)
    $status = "success"
    Local $mensaje = $fecha_ejecucion & " Se logro descargar el archivo xls en la carpeta de descargas "
@@ -350,6 +414,7 @@ Else
    	FileWrite($error_Log, $fecha_ejecucion & " no se logro encontrar el archivo "& @CRLF)
 	$status= "failure"
 	  Local $mensajeError =  $fecha_ejecucion & " no se logro encontrar el archivo "
+	  $mensajeError = StringReplace($mensajeError,"\" ,"/")
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	RunWait('taskkill /F /IM "iexplore.exe"')
 	Exit

@@ -80,6 +80,10 @@ Local $nopuedeingresarimportevalorcero = "D:\Theeye\desktop\images\nopuedeingres
 Local $admcanalesdeterceros = "D:\Theeye\desktop\images\admcanalesdeterceros.bmp"
 Local $falloCambiarEstado ="D:\Theeye\desktop\images\falloCambiarEstado.bmp"
 Local $flechitaCobroCancelacion = "D:\Theeye\desktop\images\flechitaCobroCancelacion.bmp"
+Local $noposeepermisos = "D:\Theeye\desktop\images\noposeepermisos.bmp"
+Local $errorPath = "D:\Theeye\desktop\log"
+
+
 
 
 ;si es acreditado y NF-COMAFI como agencia siguien con el otro, si no cumple con ninguno de los dos requisitos hay que procesarlo
@@ -91,19 +95,38 @@ if Not (IsArray($CmdLine)) Then
 	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 	 Exit
 EndIf
-if Not (UBound($CmdLine) > 3) Then
+if Not (UBound($CmdLine) > 2) Then
       	 $status= "failure"
 		 Local $mensajeError =  $fecha_ejecucion & " Numero incorrecto de parametros"
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		Exit
 EndIf
 
+
 Local $EntornoPrmtr = $CmdLine[1]
 Local $fileJsonPrmtr = $CmdLine[2]
-$jsonFilePath = "D:\Theeye\desktop\data\estructuraPagosEmerix.json";$fileJsonPrmtr
+
+$jsonFilePath = $fileJsonPrmtr
+
+
+Local $iFileExists = FileExists($fileJsonPrmtr)
+
+if $iFileExists == 1 Then
+   FileCopy ($fileJsonPrmtr, $fileJsonPrmtr & ".original")
+   FileWrite($ejecucionLog, $fecha_ejecucion & " Se encontro el archivo "& $jsonFilePath &  @CRLF)
+ Else
+   	FileWrite($error_Log, $fecha_ejecucion & " no se logro encontrar el archivo "& @CRLF)
+	$status= "failure"
+	  Local $mensajeError =  $fecha_ejecucion & " no se logro encontrar el archivo "
+	  ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
+	RunWait('taskkill /F /IM "iexplore.exe"')
+	Exit
+EndIf
 
    ToolTip($jsonFilePath, 0, 0)
    Sleep(2000) ; Sleep to give tooltip time to display
+
+
 
 if Not FileExists($jsonFilePath) Then
 	  $status= "failure"
@@ -119,13 +142,22 @@ if @error Then
    ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
    Exit
 EndIf
+
 Local $oStatusBases = Json_decode($JsonPlainFile)
 Local $opagos_emerixArray = Json_get($oStatusBases,'["pagos_emerix"]')
 Local $oEstado_lote = Json_get($oStatusBases,'["estado_lote"]')
 
+
+if $oEstado_lote ==  "done" Then
+   $status= "success"
+   Local $mensajeError =  $fecha_ejecucion & " No hay nada para correr en este lote "
+   ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
+   Exit
+EndIf
+
 if $oEstado_lote <>  "pending" Then
    $status= "success"
-   Local $mensajeError =  $fecha_ejecucion & " conciliaciones completas"
+   Local $mensajeError =  $fecha_ejecucion & " conciliaciones completas, No hay nada que ejecutar"
    ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
    Exit
 EndIf
@@ -134,9 +166,8 @@ EndIf
 
 
  If (FileExists($ejecucionLog)) Then
-   FileWrite($ejecucionLog, $fecha_ejecucion & " Se ejecuto downloadExcel "& @CRLF)
+   FileWrite($ejecucionLog, $fecha_ejecucion & " Se ejecuto PagosEmerix "& @CRLF)
 EndIf
-
 
 For  $opagos_emerix  In $opagos_emerixArray
    Local $fechaDeConvenio = Json_get($opagos_emerix,'["fecha_de_convenio"]')
@@ -165,7 +196,16 @@ For  $opagos_emerix  In $opagos_emerixArray
    Sleep(1000) ; Sleep to give tooltip time to display
 
    if $estado_carga = "Acreditado NF-COMAFI" Then
-	   Json_Put($opagos_emerix, ".error", "Ya se acredito pago")
+	   Json_Put($opagos_emerix, ".error", "Ya se acredito pago. Status: 'Acreditado NF-COMAFI'")
+	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
+	  ContinueLoop
+
+   EndIf
+
+   if $estado_carga = "done" Then
+	  ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 	  ContinueLoop
    EndIf
    If $EntornoPrmtr = "DEV" Then
@@ -178,13 +218,31 @@ For  $opagos_emerix  In $opagos_emerixArray
    Sleep(1000) ; Sleep to give tooltip time to display
    ;Login
    $checklogin = _login($urlEntorno)
+   ToolTip("Estado de Login"&$urlEntorno, 0, 0)
    if $checklogin == False Then
-	  ContinueLoop 1
+	  Json_Put($opagos_emerix, ".error", "Error en inicio de Login")
+	  $description = $DNI&" Error en inicio de Login"
+	  _saveErrorLog($description, $errorPath)
+	  _saveStatus()
+	  	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
+	  ContinueLoop
+
    EndIf
    ;Click a Adm Canales de Terceros
    Local $titleAttach = "Revisión de Cuentas"
-   _AdmDeTerceros($urlEntorno,$titleAttach)
+   Local $administracionDeTerceros = _AdmDeTerceros($urlEntorno,$titleAttach)
+   if $administracionDeTerceros == False Then
+	   Json_Put($opagos_emerix, ".error", "Error en clickear menu AdmDeTerceros")
+	   $description = $DNI&" Error en clickear menu AdmDeTerceros"
+	  _saveErrorLog($description, $errorPath)
+	  _saveStatus()
+	 ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
+	  ContinueLoop
 
+
+   EndIf
    ;Ingresamos fecha desde
    $contador = 1
    while Not imageExists($fechadesde, 10)
@@ -195,7 +253,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$flechaGuardar
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$fechadesde)
+		 $description = $DNI&" Error en encontrar imagen"&$fechadesde
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
+	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 		 ContinueLoop
 	  EndIf
 	  $contador = $contador+1
@@ -213,7 +275,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$flechaGuardar
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$fechahasta)
+		 $description = $DNI&" Error en encontrar imagen"&$fechahasta
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
+	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 		 ContinueLoop
 	  EndIf
 	  $contador = $contador+1
@@ -232,7 +298,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$flechaGuardar
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$nrodocumento)
+		 $description = $DNI&" Error en encontrar imagen"&$nrodocumento
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
+   	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 		 ContinueLoop
 	  EndIf
 	  $contador = $contador+1
@@ -247,18 +317,22 @@ For  $opagos_emerix  In $opagos_emerixArray
    ;///////////Se notifica si no se encontro ningun resultado////////////
     if imageExists($noseencontrarondatos, 10) then
 	  Json_Put($opagos_emerix, ".error", "No se encontraron Datos")
+	  $description = $DNI&" No se encontraron Datos"
+	  _saveErrorLog($description, $errorPath)
 	  _saveStatus()
+   	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 	 ContinueLoop
     EndIf
-
-
-
-
    ;///////////Se verifica que este En estado  Ingresado/////////////
    $verEstado = _verificarEstado()
    if $verEstado == False Then
 	  Json_Put($opagos_emerix, ".error", "Error al cambiar estado de ingreso Alert: 'Solo se pueden hacer reingresar pagos acreditados en el mismo dia' ")
-	  _saveStatus()
+	  $description = $DNI&" Error al cambiar estado de ingreso Alert: 'Solo se pueden hacer reingresar pagos acreditados en el mismo dia' "
+	  _saveErrorLog($description, $errorPath)
+	 _saveStatus()
+	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 	  ContinueLoop
    EndIf
 
@@ -266,6 +340,8 @@ For  $opagos_emerix  In $opagos_emerixArray
 	 $cambiarAgencia =  _cambiarAgencia()
 	 if $cambiarAgencia == "no se encontro cambio de agencia" Then
 		 Json_Put($opagos_emerix, ".error", "no se encontro cambio de agencia")
+		 $description = $DNI&" no se encontro cambio de agencia"
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
 		 ContinueLoop
 	  EndIf
@@ -278,17 +354,29 @@ For  $opagos_emerix  In $opagos_emerixArray
 	  sleep(10000)
 	  $tipoDePago = _verificarTipoDePago()
 	  if $tipoDePago == False Then
-		 ContinueLoop 1
+		  Json_Put($opagos_emerix, ".error", "Error en encontrar imagen _verificarTipoDePago")
+		 $description = $DNI&" Error en encontrar imagen _verificarTipoDePago"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
 	  EndIf
-	  if $tipoDePago == "Error en encontrar imagen _verificarTipoDePago " Then
-		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen _verificarTipoDePago ")
+	  if $tipoDePago == "Error en encontrar imagen _verificarTipoDePago" Then
+		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen _verificarTipoDePago")
+		 $description = $DNI&" Error en encontrar imagen _verificarTipoDePago"
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
 		 ContinueLoop
 	  EndIf
 	  ;///////////Se notifica si no se encontro ningun resultado////////////
 	  if imageExists($noseencontrarondatos, 10) then
 		 Json_Put($opagos_emerix, ".error", "No se encontraron Datos")
+		 $description = $DNI&" No se encontraron Datos"
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 		 ContinueLoop
 	  EndIf
    EndIf
@@ -297,7 +385,12 @@ For  $opagos_emerix  In $opagos_emerixArray
 	  Sleep(2000)
 	  $titleAttach = "Ficha de la Persona"
 	   ;Click a Adm Canales de Terceros
-	  _AdmDeTerceros($urlEntorno,$titleAttach)
+	 $administracionDeTerceros = _AdmDeTerceros($urlEntorno,$titleAttach)
+	  if $administracionDeTerceros == False Then
+			;cierro todas las instancias de IE.
+			RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
 
 	  ;Ingresamos fecha desde
 	  $contador = 1
@@ -308,7 +401,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$fechadesde
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 			Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$fechadesde)
+			$description = $DNI&" Error en encontrar imagen"&$fechadesde
+			_saveErrorLog($description, $errorPath)
 			_saveStatus()
+			;cierro todas las instancias de IE.
+			RunWait('taskkill /F /IM "iexplore.exe"')
 			ContinueLoop
 		 EndIf
 		 $contador = $contador+1
@@ -326,7 +423,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$fechahasta
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 			Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$fechahasta)
+			$description = $DNI&" Error en encontrar imagen"&$fechahasta
+			_saveErrorLog($description, $errorPath)
 			_saveStatus()
+			;cierro todas las instancias de IE.
+			RunWait('taskkill /F /IM "iexplore.exe"')
 			ContinueLoop
 		 EndIf
 		 $contador = $contador+1
@@ -344,7 +445,11 @@ For  $opagos_emerix  In $opagos_emerixArray
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$nrodocumento
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
 			Json_Put($opagos_emerix, ".error", "Error en encontrar imagen"&$nrodocumento)
+			$description = $DNI&" Error en encontrar imagen"&$nrodocumento
+			_saveErrorLog($description, $errorPath)
 			_saveStatus()
+				    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 			ContinueLoop
 		 EndIf
 		 $contador = $contador+1
@@ -360,24 +465,33 @@ For  $opagos_emerix  In $opagos_emerixArray
 
 	  if $verificarCobros == "fail" Then
 		 Json_Put($estado_carga, ".error", "No se puede contribuir un pago anulado o acreditado")
+		 $description = $DNI&" No se puede contribuir un pago anulado o acreditado"
+		 _saveErrorLog($description, $errorPath)
 		 _saveStatus()
+	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 		 ContinueLoop
 	  EndIf
 
 
    ;Verificamos si tiene alguna capital tiene 0.00
-   $verificarUnaFilaCapitalCero = _verificarUnaFilaCapitalCero()
+   $verificarUnaFilaCapitalCero = _verificarUnaFilaCapitalCero($tipoDePago)
    if $verificarUnaFilaCapitalCero == True Then
 	  Json_Put($opagos_emerix, ".error", "Verificar este pago de manera manual")
+	  $description = $DNI&" Verificar este pago de manera manual"
+	  _saveErrorLog($description, $errorPath)
 	 _saveStatus()
+	 	    ;cierro todas las instancias de IE.
+	  RunWait('taskkill /F /IM "iexplore.exe"')
 	  ContinueLoop
    EndIf
 
    $verificarCero = _verificarCapitalCero()
    ToolTip($verificarCero&"verificarCero", 0, 0)
-   ;MsgBox("","",$verificarCero&"verificarCero")
+
    Sleep(1000) ; Sleep to give tooltip time to display
    $verificarPorrateo = ""
+   $verificarCobroDeUnaFila = ""
    If $verificarCero == True Then
 	   Sleep(3000)
 	  _clickInImage($grabacionExitosa)
@@ -388,31 +502,82 @@ For  $opagos_emerix  In $opagos_emerixArray
    Else
 	  ;si tiene una sola fila en el input de importe cobro se le pone importe_emerix
 	   ToolTip($tipoDePago, 0, 0)
-	   ;MsgBox("","",$tipoDePago&"linea 387")
-	  _cobroConUnaSolaFila($tipoDePago)
-	  ;//////////SI TIENE UNA SOLA FILA EN EL INPUT DE IMPORTE COBRO SE LE PONE importe_emerix. Sino se hace Prorrateo de importe por producto/////
+	  $verificarCobroDeUnaFila =  _cobroConUnaSolaFila($tipoDePago)
+
+	  If $verificarCobroDeUnaFila == "No Posee Permisos para grabar este pago" Then
+		 Json_Put($opagos_emerix, ".error", "No Posee Permisos para grabar este pago")
+		 $description = $DNI&" No Posee Permisos para grabar este pago"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+
+	  If $verificarCobroDeUnaFila == "Error en encontrar imagen $importeCobroCancelacion" Then
+		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen $importeCobroCancelacion")
+		 $description = $DNI&" Error en encontrar imagen $importeCobroCancelacion"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+
+	  If $verificarCobroDeUnaFila == "Error en encontrar imagen $importeCobroPagoParcial" Then
+		 Json_Put($opagos_emerix, ".error", "Error en encontrar imagen $importeCobroPagoParcial")
+		 $description = $DNI&" Error en encontrar imagen $importeCobroPagoParcial"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+
+	  ;/////////Prorrateo de importe por producto/////
 	  $verificarPorrateo = _porrateo($tipoDePago)
+	  If $verificarPorrateo == "No Posee Permisos para grabar este pago" Then
+		 Json_Put($opagos_emerix, ".error", "No Posee Permisos para grabar este pago")
+		 $description = $DNI&" No Posee Permisos para grabar este pago"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+	  if $verificarPorrateo == "no se puede ingresar importe con valor cero" Then
+		 Json_Put($opagos_emerix, ".error", "no se puede ingresar importe con valor cero")
+		 $description = $DNI&" no se puede ingresar importe con valor cero"
+		 _saveErrorLog($description, $errorPath)
+		 _saveStatus()
+		 ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+
+	  If $verificarCero == "No es valido" Then
+		 Json_Put($opagos_emerix, ".error", "No se pudo cargar en distribucion por 0 ")
+		 _saveStatus()
+		 $description = $DNI&" No se pudo cargar en distribucion por 0"
+		 _saveErrorLog($description, $errorPath)
+			   ;cierro todas las instancias de IE.
+		 RunWait('taskkill /F /IM "iexplore.exe"')
+		 ContinueLoop
+	  EndIf
+	  Sleep(3000)
+
 	  Sleep(3000)
 	  _clickInImage($grabacionExitosa)
 	  Send("{ENTER}")
 	  Sleep(3000)
 	  _verificacionDeValidez()
    EndIf
-   if $verificarPorrateo == "no se puede ingresar importe con valor cero" Then
-			Json_Put($opagos_emerix, ".error", "no se puede ingresar importe con valor cero")
-			_saveStatus()
-			ContinueLoop
-   EndIf
 
-   If $verificarCero == "No es valido" Then
-	  Json_Put($opagos_emerix, ".error", "No se pudo cargar en distribucion por 0 ")
-	  _saveStatus()
-	  ContinueLoop
-   EndIf
-   Sleep(3000)
 
    Json_Put($opagos_emerix, ".estado_carga", "done")
   _saveStatus()
+    ;cierro todas las instancias de IE.
+   RunWait('taskkill /F /IM "iexplore.exe"')
 
 
 Next
@@ -432,7 +597,16 @@ RunWait('taskkill /F /IM "iexplore.exe"')
 Func _verificarEstado()
 	   ;VERIFICAMOS QUE ESTE VALIDADO Y LO PROCESAMOS
    $oIE = _IEAttach("Emerix Tandem")
-   Local $oTable = _IETableGetCollection($oIE,46)
+  Local $numberArrayTable = 45
+   if $EntornoPrmtr == "DEV" Then
+	  $numberArrayTable= 46
+   EndIf
+   if $EntornoPrmtr == "PROD" Then
+	  $numberArrayTable= 45
+   EndIf
+
+
+   Local $oTable = _IETableGetCollection($oIE,$numberArrayTable)
    Local  $aTableData = _IETableWriteToArray($oTable, True)
    $iRows = UBound($aTableData, $UBOUND_ROWS) ; Total number of rows.
    $iCols = UBound($aTableData, $UBOUND_COLUMNS) ; Total number of columns.
@@ -452,10 +626,10 @@ Func _verificarEstado()
 						   $title_value = $image.GetAttribute("name")
 						   if($title_value = "chkCol") Then
 								 $distribuir = $image
+								 _IEAction($distribuir, "click")
 								 ExitLoop
 						   EndIf
 						Next
-						_IEAction($distribuir, "click")
 						_clickInImage($cambiar2)
 						Sleep(2000)
 						if imageExists($cambioDeEstado,10) Then
@@ -480,7 +654,7 @@ Func _verificarEstado()
 
 EndFunc
 
-Func _verificarUnaFilaCapitalCero()
+Func _verificarUnaFilaCapitalCero($tipoDePago)
    $oIE = _IEAttach("Ingreso de Cobros","title",2)
    If @error = $_IEStatus_NoMatch Then
 	  MsgBox("title","falla el match",2)
@@ -492,34 +666,58 @@ Func _verificarUnaFilaCapitalCero()
    Local $capitalCero = False
 
    ;Hacemos un recorrido y verificamos que contenga "0.00" en la tabla. Si tiene 0.00 devuelve true.
-   If $iRows == 2 Then
-	  Local $totalPagos = 0
-	  Local $rows = $iRows -1
-	  For $i = 0 To $iRows -1
-		 For $j = 0 To $iCols -1
-			if $j = 6 Then
-			   Local $Capital = $aTableData[$i][$j]
-			   if $Capital <> "Capital" Then
-				  if $Capital == "0,00" Then
-					 $capitalCero = True
-					 Return $capitalCero
+   if $tipoDePago == "Pago Parcial" Then
+	  If $iRows == 2 Then
+		 Local $totalPagos = 0
+		 Local $rows = $iRows -1
+		 For $i = 0 To $iRows -1
+			For $j = 0 To $iCols -1
+			   if $j = 4 Then
+				  Local $Capital = $aTableData[$i][$j]
+				  if $Capital <> "Capital" Then
+					 if $Capital == "0,00" Then
+						$capitalCero = True
+						Return $capitalCero
+					 EndIf
 				  EndIf
 			   EndIf
-			EndIf
+			Next
 		 Next
-	  Next
+	  EndIf
+   EndIf
+
+   if $tipoDePago == "Cancelatorio" Then
+	  If $iRows == 2 Then
+		 Local $totalPagos = 0
+		 Local $rows = $iRows -1
+		 For $i = 0 To $iRows -1
+			For $j = 0 To $iCols -1
+			   if $j = 6 Then
+				  Local $Capital = $aTableData[$i][$j]
+				  if $Capital <> "Capital" Then
+					 if $Capital == "0,00" Then
+						$capitalCero = True
+						Return $capitalCero
+					 EndIf
+				  EndIf
+			   EndIf
+			Next
+		 Next
+	  EndIf
    EndIf
    Return $capitalCero
 EndFunc
 
 Func _cambiarAgencia()
-    Local $contador = 1
+   $contador = 1
    while Not imageExists($cambiar, 10)
 	  Sleep(1000)
 	  if $contador > 45 Then
 		 $status= "failure"
 		 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$cambiar
 		 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
+		 	 $description = $DNI&" no se encontro cambio de agencia"
+			   _saveErrorLog($description, $errorPath)
 		 Return "no se encontro cambio de agencia"
 	  EndIf
 	  $contador = $contador+1
@@ -553,8 +751,8 @@ EndFunc
 Func _cobroConUnaSolaFila($tipoDePago)
 
 	  ;click en check de Select
+	  ToolTip($tipoDePago&"en _cobroConUnaSolaFila", 0, 0)
 	  $oIE = _IEAttach("Ingreso de Cobros","title",2)
-		 ToolTip("_cobroConUnaSolaFila", 0, 0)
 	  If @error = $_IEStatus_NoMatch Then
 		 MsgBox("title","falla el match",2)
 	  EndIf
@@ -572,14 +770,16 @@ Func _cobroConUnaSolaFila($tipoDePago)
 			$title_value = $image.GetAttribute("name")
 			if($title_value = "chkCol") Then
 				  $distribuir = $image
-				  _IEAction($distribuir, "click")
 			EndIf
 		 Next
+		 _IEAction($distribuir, "click")
+
 		 ToolTip($tipoDePago&"en _cobroConUnaSolaFila", 0, 0)
 		 Sleep(1000) ; Sleep to give tooltip time to display
 		 if $tipoDePago == "Cancelatorio" Then
 			Sleep(2000)
-			_clickInImage($importeCobroCancelacion)
+			MouseMove(851, 355)
+			MouseClick($MOUSE_CLICK_LEFT)
 			Sleep(1000)
 			send ("{TAB}")
 			Sleep(1000)
@@ -587,10 +787,22 @@ Func _cobroConUnaSolaFila($tipoDePago)
 			send($importe_emerix)
 		 EndIf
 
-		 ToolTip($tipoDePago&"en _cobroConUnaSolaFila", 0, 0)
 
 		 if $tipoDePago == "Pago Parcial" Then
 			   Sleep(2000)
+			   $contador = 1
+			   while Not imageExists($importeCobroPagoParcial, 10)
+				  Sleep(500)
+				  if $contador > 45 Then
+					 $status= "failure"
+					 Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$importeCobroPagoParcial
+					 ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
+					 $description = $DNI&" Error en encontrar imagen $importeCobroPagoParcial"
+					 _saveErrorLog($description, $errorPath)
+					 Return "Error en encontrar imagen $importeCobroPagoParcial"
+				  EndIf
+				  $contador = $contador+1
+			   WEnd
 			   _clickInImage($importeCobroPagoParcial)
 			   Sleep(1000)
 			   send ("{TAB}")
@@ -615,6 +827,14 @@ Func _cobroConUnaSolaFila($tipoDePago)
 			EndIf
 		 Next
 		 _IEAction($imageAplicarfiltro, "click")
+
+		 Sleep(3000)
+
+		 If imageExists($noposeepermisos,10) Then
+			$description = $DNI&" No Posee Permisos para grabar este pago"
+			_saveErrorLog($description, $errorPath)
+			Return "No Posee Permisos para grabar este pago"
+		 EndIf
 
 		 ;si sale grabacion exitosa
 	  EndIf
@@ -798,7 +1018,8 @@ Func _porrateo($tipoDePago)
 			   Next
 			   ToolTip("porrateo", 0, 0)
 			   Sleep(3000)
-			   _clickInImage($importeCobroCancelacion)
+			   MouseMove(851, 355)
+			   MouseClick($MOUSE_CLICK_LEFT)
 			   Sleep(1000)
 			   ;calculamos  el importe
 			   For $i = 0 To $Rows -1
@@ -829,7 +1050,6 @@ Func _porrateo($tipoDePago)
 	  EndIf
 
 	  if $tipoDePago == "Pago Parcial" Then
-			MsgBox("","",$iRows)
 			If $iRows > 2 Then
 			   Local $totalPagos = 0
 			   Local $rows = $iRows -1
@@ -879,10 +1099,19 @@ Func _porrateo($tipoDePago)
 
 			   Sleep(3000)
 			   If imageExists($nopuedeingresarimportevalorcero,10) Then
+				  $description = $DNI&" no se puede ingresar importe con valor cero"
+				  _saveErrorLog($description, $errorPath)
 				  return "no se puede ingresar importe con valor cero"
 			   EndIf
 			EndIf
+		 EndIf
+	  Sleep(3000)
+	  If imageExists($noposeepermisos,10) Then
+			$description = $DNI&" No Posee Permisos para grabar este pago"
+			_saveErrorLog($description, $errorPath)
+			Return "No Posee Permisos para grabar este pago"
 	  EndIf
+
 
    EndFunc
 
@@ -891,14 +1120,18 @@ Func _AdmDeTerceros($urlEntorno, $titleAttach)
      $oIE = _IEAttach($titleAttach)
 	  Local $titles = _IETagNameGetCollection($oIE, "a")
 	  Local $ingresarText
-	  For $title in $titles
-		 $href_value = $title.GetAttribute("href")
-		 if($href_value = $urlEntorno&"/tandem/operacional/addins/circuitos_adm/int_ng_cobros_adm_pmafi.asp") Then
-			$ingresarText = $title
-		 ExitLoop
-		 EndIf
-	  Next
-	  _IEAction($ingresarText, "click")
+	  If IsObj($titles) Then
+		 For $title in $titles
+			$href_value = $title.GetAttribute("href")
+			if($href_value = $urlEntorno&"/tandem/operacional/addins/circuitos_adm/int_ng_cobros_adm_pmafi.asp") Then
+			   $ingresarText = $title
+			ExitLoop
+			EndIf
+		 Next
+		 _IEAction($ingresarText, "click")
+	  Else
+		 Return False
+	  EndIf
 	  sleep(4000)
  EndFunc
 
@@ -941,33 +1174,48 @@ Func _login($urlEntorno)
 
    ;Ingreso al sitio
     Local $tipoDePago = $tipo_actividad;"Cancelatorio"
+	ToolTip("Ingreso a login "&$urlEntorno,0,0)
     If $EntornoPrmtr = "DEV" Then
 	  Local $oIE = _IECreate($urlEntorno&"/tandem/login/source.asp")
-	  Sleep(2000)
+	     WinSetState(_IEPropertyGet($oIE, "frm"), "", @SW_MAXIMIZE)
 	  _IELoadWait($oIE)
-	  Sleep(2000)
+
+	  Sleep(5000)
 
 	  if imageExists($seleccioneUbicacion, 10) then
 		 Send("{F11}")
 	  EndIf
 
 	  ;///////CLICK A TEST///////////
-	  Sleep(10000)
-	  $oIE = _IEAttach("Seleccione Ubicación")
+	  Sleep(4000)
+	  $oIE = _IEAttach("Seleccione")
+	  If WinExists("Seleccione") Then
+		 WinActivate("Seleccione")
+		 ToolTip("Ventana de Login encontrada",0,0)
+		 Sleep(2000)
+	  Else
+		 Return False
+	  EndIf
+
+	   If @error = $_IEStatus_NoMatch Then
+		 Return False
+	  EndIf
 	  Local $images = _IETagNameGetCollection($oIE, "img")
 	  Local $imageSolTest
 	  sleep(6000)
-	  For $image in $images
-		 $src_value = $image.GetAttribute("src")
-		 if($src_value = $urlEntorno&"/tandem/operacional/images/general/argentina.gif") Then
-			$imageSolTest = $image
-		 ExitLoop
-		 EndIf
-	  Next
-	  _IEAction($imageSolTest, "click")
-	  	If @error Then
-		  return False
-		EndIf
+	  If IsObj($images) Then
+		 For $image in $images
+			$src_value = $image.GetAttribute("src")
+			if($src_value = $urlEntorno&"/tandem/operacional/images/general/argentina.gif") Then
+			   $imageSolTest = $image
+			ExitLoop
+			EndIf
+		 Next
+		 _IEAction($imageSolTest, "click")
+	  Else
+		  Return False
+	  EndIf
+
 
 	  Sleep(4000)
 	  ;///////Ingresamos usuario y contraseña///////////
@@ -976,33 +1224,56 @@ Func _login($urlEntorno)
 	  send($pass)
 	  send ("{TAB}")
 	  Send ("{ENTER}")
-	  Sleep(10000)
+	  Sleep(6000)
 
 
    ;//////////ENTORNO A PROD//////////////
     ElseIf $EntornoPrmtr = "PROD" Then
 	  Local $oIE = _IECreate($urlEntorno&"/tandem/login/source.asp")
+	  Sleep(5000)
+	  ToolTip($EntornoPrmtr&" IE abierto",0,0)
+	  Sleep(1000)
+	   $oIE = _IEAttach("Seleccione")
+	  If @error = $_IEStatus_NoMatch Then
+		 Return False
+	  EndIf
+	  ToolTip("Se logro el attach",0,0)
+	  Sleep(1000)
+	  If WinExists("Seleccione") Then
+		 WinActivate("Seleccione")
+		 ToolTip("Ventana de Login encontrada",0,0)
+		 Sleep(2000)
+	  Else
+		  ToolTip("Ventana de Login NO encontrada",0,0)
+		 Return False
+	  EndIf
+	     WinSetState(_IEPropertyGet($oIE, "frm"), "", @SW_MAXIMIZE)
 	  _IELoadWait($oIE)
 	  Sleep(6000)
 	  if imageExists($seleccioneUbicacion, 10) then
 		 Send("{F11}")
 	  EndIf
 	  Sleep(10000)
-	  $oIE = _IEAttach("Seleccione Ubicación")
+
+
 	  Local $images = _IETagNameGetCollection($oIE, "img")
 	  Local $imageSolTest
-	  For $image in $images
-		 $src_value = $image.GetAttribute("src")
-		 if($src_value = $urlEntorno&"/tandem/operacional/images/general/argentina.gif") Then
-			$imageSolTest = $image
-		 ExitLoop
-		 EndIf
-	  Next
-	  _IEAction($imageSolTest, "click")
+	  If IsObj($images) Then
+		 For $image in $images
+			$src_value = $image.GetAttribute("src")
+			if($src_value = $urlEntorno&"/tandem/operacional/images/general/argentina.gif") Then
+			   $imageSolTest = $image
+			ExitLoop
+			EndIf
+		 Next
+		 _IEAction($imageSolTest, "click")
+	  Else
+		 Return False
+	  EndIf
 	  sleep(5000)
    EndIf
 
-
+ sleep(5000)
 
 
 EndFunc
@@ -1024,6 +1295,9 @@ EndFunc
 
 Func _filtroEnAdmTerceros()
    $oIE = _IEAttach("Emerix Tandem")
+     If @error = $_IEStatus_NoMatch Then
+		 ToolTip("fallo match de filtro en adm de terceros",0,0)
+	  EndIf
    Local $images = _IETagNameGetCollection($oIE, "a")
    Local $imageAplicarfiltro
 	  For $image in $images
@@ -1093,28 +1367,18 @@ Func _verificarTipoDePago()
 	  Local $iRows = UBound($aTableData, $UBOUND_ROWS) ; Total number of rows.
 	  Local $iCols = UBound($aTableData, $UBOUND_COLUMNS) ; Total number of columns.
 	  Sleep(5000)
-
-	  For $i = 0 To $iRows -1
-		 For $j = 0 To $iCols -1
-			if $j = 8 Then
-			   Local $Cartera = $aTableData[$i][$j]
-					 $oDivs = _IETagNameGetCollection($oIE, "div")
-					 Sleep(5000)
-					 For $oDiv In $oDivs -1
-						   If IsObj($oDiv) Then
-							  If $oDiv.className = "TablaDinamicaFormatoLink" Then
-									_IEAction($oDiv, "click")
-									If @error Then
-										Return False
-									EndIf
-									ExitLoop
-							  EndIf
-						   EndIf
-					 Next
+	  $oDivs = _IETagNameGetCollection($oIE, "div")
+	  If IsObj($oDivs) Then
+		 For $oDiv In $oDivs -1
+			If $oDiv.className = "TablaDinamicaFormatoLink" Then
+				  _IEAction($oDiv, "click")
+				  ExitLoop
 			EndIf
 		 Next
-	  Next
-
+	  Else
+		  Return False
+	  EndIf
+	  Sleep(5000)
 
 
 
@@ -1131,28 +1395,31 @@ Func _verificarTipoDePago()
 		 EndIf
 	  EndIf
 	  Sleep(7000)
-
+	  $contador = 1
 	  ;Addins
 	  while Not imageExists($addins, 10)
 		 Sleep(1000)
-		 Local $contador = 1
-		 if $contador > 120 Then
+		 if $contador > 45 Then
 			$status= "failure"
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$addins
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
-			return "Error en encontrar imagen _verificarTipoDePago "
+			$description = $DNI&" Error en encontrar imagen _verificarTipoDePago"
+			_saveErrorLog($description, $errorPath)
+			return "Error en encontrar imagen _verificarTipoDePago"
 		 EndIf
 		 $contador = $contador+1
 	  WEnd
 	  _clickInImage($addins)
 	  ;Cobros
+	  $contador = 1
 	  while Not imageExists($cobros, 10)
 		 Sleep(1000)
-		 Local $contador = 1
 		 if $contador > 45 Then
 			$status= "failure"
 			Local $mensajeError =  $fecha_ejecucion & " no existe la imagen "&$cobros
 			ConsoleWrite('{"state":"' & $status & '", "data":["' & $mensajeError & '"]}')
+			$description = $DNI&" Error en encontrar imagen _verificarTipoDePago"
+			_saveErrorLog($description, $errorPath)
 			return "Error en encontrar imagen _verificarTipoDePago"
 		 EndIf
 		 $contador = $contador+1
@@ -1196,13 +1463,13 @@ Func _verificarTipoDePago()
 			$tipoDePago = "Pago Parcial"
 		 EndIf
 
-		 if $cuentaFinalDeImportes < 0 Then
+		 if $cuentaFinalDeImportes <= 0 Then
 		   $tipoDePago = "Cancelatorio"
 		EndIf
 
 	  Else
 
-		 $tipoDePago = "Cancelatorio"
+		 $tipoDePago = "Pago Parcial"
 
 	  EndIf
 	  Sleep(2000)
@@ -1266,11 +1533,21 @@ EndFunc
 Func _verificacionDeValidez()
 	  ;VERIFICAMOS QUE ESTE VALIDADO Y LO PROCESAMOS
 	  $oIE = _IEAttach("Emerix Tandem")
-	  Local $oTable = _IETableGetCollection($oIE,46)
+	    Local $numberArrayTable = 45
+	  if $EntornoPrmtr == "DEV" Then
+		 $numberArrayTable= 46
+	  EndIf
+	  if $EntornoPrmtr == "PROD" Then
+		 $numberArrayTable= 45
+	  EndIf
+
+
+	  Local $oTable = _IETableGetCollection($oIE,$numberArrayTable)
 	  Local  $aTableData = _IETableWriteToArray($oTable, True)
 	  $iRows = UBound($aTableData, $UBOUND_ROWS) ; Total number of rows.
 	  $iCols = UBound($aTableData, $UBOUND_COLUMNS) ; Total number of columns.
 
+	  Sleep(2000)
 		 For $i = 0 To $iRows -1
 			For $j = 0 To $iCols -1
 			   if $j = 11 Then
@@ -1310,6 +1587,38 @@ Func _verificacionDeValidez()
 	   Send("{ENTER}")
 	   Sleep(3000)
 EndFunc
+
+
+
+
+Func _saveErrorLog($description, $errorPath)
+
+	Local $hFile = FileOpen($errorPath & "\Execution.log", 1)
+
+	if @error Then
+	EndIf
+	; ERROR
+
+	If ($debug) then
+		ConsoleWrite($description & @CRLF)
+	Endif
+
+	Sleep(500)
+	; Sacamos screenshot y guardamos en array de errores
+	Local $fileErrorScreenshot = $errorPath & "\" & "error_" & "" & @MDAY & "-" & @MON & "-" & @YEAR & "" & @HOUR & "-" & @MIN & "-" & @MSEC & ".jpg"
+	_ScreenCapture_Capture($fileErrorScreenshot)
+	_FileWriteLog($hFile, $description & " File: " & $fileErrorScreenshot)
+
+	if @error Then
+	EndIf
+	Sleep(500)
+	FileClose($hFile)
+
+EndFunc
+
+
+
+
 
 
 
